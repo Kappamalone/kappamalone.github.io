@@ -8,74 +8,122 @@ tags: ["emulation"]
 This is a fun little project I started over the summer in order to attempt to apply some
 dynamic recompilation techniques to a commercial piece of hardware.
 
-Dynamic recompilation can be employed in an emulator through a "JIT" compiler. However, in order
-to write a JIT, we need to have a working emulator in the first place. The first part of this
-series will be focused on how to create a working Gameboy emulator that can emulate most games
-accurately. The following post will be on how to take this emulator and then optimise it using a
-JIT.
+Legend of Zelda | Tetris
+:-------------------------:|:-------------------------:
+<img src="https://github.com/Kappamalone/recompiler_boy/blob/master/images/LoZ.png?raw=true" width="400"> | <img src="https://github.com/Kappamalone/recompiler_boy/blob/master/images/Tetris.png?raw=true" width="400">
+
+
+To delve into the specifics of dynamic recompilation, we first
+need to have an emulator.
+This post will detail how an emulator operates, and the following
+will get into the specifics of a dynamic recompiler. Let's go!
 
 ## What is "emulation"?
 
-Emulation is the technique by which a guest system is run on a host system. In this case, the guest
-system is the original Nintendo Gameboy, and the host system is my laptop.
+Emulation involves running a guest system on a host system.
+Here, the guest system is the original Nintendo Gameboy,
+and the host system is my (or your) laptop.
 
-What we need to understand however, is that the Gameboy's architecture and design is completely different
-to our modern pieces of hardware. For example, the Gameboy's Sharp LR35902 is based on the Zilog Z80
-ISA, whereas (most) modern CPU's on computers and laptops are based on the x86 ISA. The Gameboy's
-Pixel Processing Unit (PPU) is also a completely custom bit of hardware designed to push pixels
-to the screen, and again does not hold any resemblance to modern monitors. This leaves us with a
-big question, how do we play Gameboy games on modern hardware?
+he Gameboy's architecture differs significantly from modern hardware.
+Its Sharp LR35902 CPU is based on the Zilog Z80 ISA,
+unlike the x86 ISA of most current CPUs.
+The custom Pixel Processing Unit (PPU) further sets it apart
+as completely distant from current gen GPUs.
+So, how do we play Gameboy games on modern hardware?
+The answer: emulation.
+By recreating the Gameboy's hardware and internal state through software,
+we can `trick` games into thinking they're on authentic hardware when executed.
 
-If your answer was through emulating the Gameboy's hardware, then you'd be right! What we can do,
-is we can recreate the Gameboy's hardware and internal state from the ground up, so that when we start
-executing a game's rom, we can *trick* the game into thinking it's being run on actual hardware.
-
-So, how exactly do we begin this process? We first start where all things start in computer science:
-memory.
+To begin the process, we start with the foundational element
+in computer science: memory.
 
 ## The Gameboy's memory map
 
 First, let's have a look at how the 16 bit memory bus of the Gameboy is structured
-(courtesy of the great resource: https://gbdev.io/pandocs/):
+(courtesy of *[pandocs](https://gbdev.io/pandocs/)*):
 
 ![Memory map](./images/memory_map.png)
 
-From here we can see that the game's ROM is mapped from `0x0000` to `0x7FFF`. Great! Let's load the
-game's rom into this region and start executing instructions!
+From here we can see that the game's ROM is mapped from **0x0000** to **0x7FFF**. Great! Let's load the
+game's rom into this region and start executing instructions.
 
 ## Executing instructions, an interpreter
 
-Let's do a quick rundown of how the internals of a CPU work. The Gameboy's program counter starts at
-the position `0x0000`. It also has a stack pointer, and 4 registers `AF`, `BC`, `DE` and `HL`.
+The Gameboy's CPU starts with a program counter at **0x0000**
+and features a stack pointer, along with registers **AF**,
+**BC**, **DE**, and **HL**.
+Gameboy instructions, variable in length, can be decoded using this
+*[opcode table](https://izik1.github.io/gbops/)*.
 
-Gameboy instructions are variable length, and can be decoded using *this* opcode table.
-Once we figure out what instruction we're dealing with, we simply need to "emulate"
-how the instruction works. Let's show an example:
-
-Let's take this opcode: `0x04`. Looking at the opcode table - we can see that this decodes to
-`INC B`. Let's look at the instruction reference [here](https://rgbds.gbdev.io/docs/v0.5.1/gbz80.7#INC_r8)
-
-Nice! So let's look at the implementation that I've written:
+Let's take an example: opcode **0x04** translates to **INC B**.
+The *[instruction reference](https://rgbds.gbdev.io/docs/v0.5.1/gbz80.7#INC_r8)*
+tells us how to recreate this instruction in software, so
+let's look at how recompiler boy does it
 
 ```cpp
 int GBInterpreter::inc_r8(Core& core, uint8_t r8) {
+  // Decode which register is being incremented
   auto& src = get_r8(core, r8);
+
+  // Set half carry flag
   core.set_flag(Regs::H, (src & 0xf) == 0xf);
+
+  // Perform the opcode operation: increment the register
   src++;
+
+  // Set zero flag
   core.set_flag(Regs::Z, src == 0);
+
+  // Set negative flag to 0 unconditionally
   core.set_flag(Regs::N, false);
 
   return 0;
 }
 ```
 
+From this short example we can learn a lot of things:
+
+* \> Every instruction can possibly modify one of four flags
+  (ZNHC)
+
+* \> Instructions can possibly encode which register they
+  modify through the opcode itself
+
+  * ![opcode decoding](./images/decoding.png) From this
+  we can see that bits 3-5 select the register from an
+  opcode grouping here:
+  ![r8 decoding](./images/r8.png)
+  Since **0x04** has the bits 3-5 set to 0, it selects the
+  **B** register!
+
+Phew, that's one instruction implemented. Only 511 more
+to go. While this approach works (and is aptly called
+an interpreter), it's very slow. The dynamic recompiler
+in the next post aims to address that.
+
 ## The Pixel Processing Unit
+
+The PPU of the Gameboy is a custom scanline renderer that
+reads a **tilemap**, which indexes into **tiledata**.
+
 
 ## Interrupts, timing, and putting it all together
 
-## Future Topics
+Once we implement the cpu using an interpreter and the ppu,
+we can start booting some basic games and seeing some visual
+output.
+
+However, if we want to actually play games, then we have
+to implement interrupts and correct timing of components
+
+## Future topics, and other readings
 
 The project's future posts will delve into JIT compilation to optimize the emulator further.
 The focus will be on enhancing performance and accuracy for a wide range of Gameboy games.
 
 [Next article](../recompiler_boy_part_2)
+
+Other blogs for further readings:
+
+- \> https://www.copetti.org/writings/consoles/game-boy/
+- \> https://emudev.de/gameboy-emulator/overview/
