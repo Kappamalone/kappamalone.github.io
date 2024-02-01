@@ -115,13 +115,14 @@ output.
 
 However, if we want to actually play games, then we have
 to implement interrupts and correct timing of components
+in order to have everything work nicely together.
 
 ## Future topics, and other readings
 
 The project's future posts will delve into JIT compilation to optimize the emulator further.
 The focus will be on enhancing performance and accuracy for a wide range of Gameboy games.
 
-[Next article](../recompiler_boy_part_2)
+*[Next article](../recompiler_boy_part_2)*
 
 Other blogs for further readings:
 
